@@ -1,5 +1,7 @@
-//Uncomment the below lines to display general debug information (in most cases only for the first few operations) or the Huffman table.
-#define DEBUG
+#define _CRT_SECURE_NO_WARNINGS
+
+//Uncomment the below line to display general debug information (in most cases only for the first few operations) or the Huffman table.
+//#define DEBUG
 
 #include <fstream>
 #include <algorithm>
@@ -52,8 +54,7 @@ int main(int argc, char** argv)  {
 
 	if (argc < 2) {
 		cout << "\nInput error: provide the filename of the data to be encrypted.\n"
-			<< "The final message can be found in the file \"output\".\n"
-			<< "For debug also append an arbitrary third argument.\n";
+			<< "The final message can be found in the file \"output\".\n";
 		return 0;
 	}
 
@@ -77,7 +78,8 @@ int main(int argc, char** argv)  {
 		message = new char[(int)messageSize];
 		inputFile.seekg(0); //Move parsing back to beginning.
 		inputFile.read(message, messageSize);
-	} else { cout << "Error opening input file with name: " << argv[1] << endl; return 0; }
+	}
+	else { cout << "Error opening input file with name: " << argv[1] << endl; inputFile.close(); return 0; }
 	inputFile.close();
 
 	//First, sort the message using an O(n log n) sort to help enable our second step's logic (though it costs a potentially large string copy operation).
@@ -101,13 +103,13 @@ int main(int argc, char** argv)  {
 		prev = sortedMessage[i];
 	}
 
-    #ifdef DEBUG
+#ifdef DEBUG
 	cout << "Original message: " << message << endl;
 	cout << "Sorted message: " << sortedMessage << endl;
 	cout << "\nSingleton trees inside forest--index, symbol, frequency:\n";
 	for (int i = 0; i < forest.size(); ++i) cout << i << ": " << forest[i]->symbol << " " << forest[i]->frequency << endl;
 	cout << "\nBeginning join operations:\n";
-    #endif
+#endif
 
 	//Third, iterate the forest until 1 tree, the Huffman tree, remains.
 	int huffmanTreeCountAndTableLength = forest.size();
@@ -125,17 +127,17 @@ int main(int argc, char** argv)  {
 	map<char, string> huffmanTable; //Alternately could try a direct address table of strings to speed accesses, but looking to become more familiar with <map>, plus O(log n) is still great!
 	buildHuffmanTable(huffmanTable, forest[0]); //Will fill in the rows of huffmanTable with prefix codes, each row gets one that stands for a unique byte symbol.
 
-    #ifdef DEBUG
+#ifdef DEBUG
 	cout << "\nHuffman table contents:\n";
 	for (auto iter = huffmanTable.cbegin(); iter != huffmanTable.cend(); ++iter) cout << iter->first << ' ' << iter->second << endl; //Auto just fills in the right iter type for you.
 	cout << endl;
 	cout << "Begin monitoring of the encrypted message's writing loop:\n";
-    #endif
+#endif
 
 	//Fifth, serialize the tree to be sent to the other end that's getting the encrypted message.
 	outputFile.open("serializedTree.txt", ios::out | ios::binary);
 	if (outputFile.is_open()) writeTree(outputFile, forest[0]);
-	else { cout << "Error in creating or writing to serializedTree.txt!\n"; return 0; }
+	else { cout << "Error in creating or writing to serializedTree.txt!\n"; outputFile.close(); return 0; }
 	outputFile.close();
 
 	//Sixth and finally, encrypt the message and print result.
@@ -148,14 +150,14 @@ int main(int argc, char** argv)  {
 			string code = huffmanTable[message[i]]; //Ready the next prefix code to be written.
 			for (unsigned int j = 0; j < code.length(); ++j) {
 				byteArr[0] |= (code[j] - '0') << bitPos; //Convert a prefix char to int, then left shift the bit bitPos times, and then OR-ing it into the current bitstring in byteArr.
-				#ifdef DEBUG
+#ifdef DEBUG
 				if (i < operationInfoLimit) cout << bitPos << ".) byteArr[0]: " << (int)byteArr[0] << endl;
-				#endif
+#endif
 				bitPos--;
 				if (bitPos < 0) { //We have a full byte ready to be written.
-					#ifdef DEBUG
+#ifdef DEBUG
 					if (i < operationInfoLimit) cout << "Writing byteArr[0] to file.\n";
-					#endif
+#endif
 					outputFile.write(byteArr, 1);
 					bitPos = 7;
 					byteArr[0] = 0;
@@ -165,37 +167,40 @@ int main(int argc, char** argv)  {
 
 		if (bitPos != 7) outputFile.write(byteArr, 1); //Remaining bits leftover in byteArray are left as zeroes just to keep it a byte in length.
 		byteArr[0] = (bitPos == 7) ? 0 : bitPos + 1; //bitPos+1 is now equal to the number of trash bits, so we can use it to keep from reading said padding.
-		#ifdef DEBUG
+#ifdef DEBUG
 		cout << "Wrote byteArr[0] to the file with " << (int)byteArr[0] << " trash bits.\n";
 		cout << "Writing the number of trash bits to file.\n";
-		#endif
+#endif
 		outputFile.write(byteArr, 1);
-	} else { cout << "Error in creating or writing to encryptedMessage.txt!\n"; return 0; }
+	}
+	else { cout << "Error in creating or writing to encryptedMessage.txt!\n"; outputFile.close(); return 0; }
 	outputFile.close();
-	
+
 	/*END OF ENCRYPTION CODE - START OF DECRYPTION CODE*/
 
 	//In decryption, first unserialize the tree (the order should be symbol, frequency, hasLeft, hasRight) via stack.
 	stack<node*> stack;
 	inputFile.open("serializedTree.txt", ios::in | ios::binary);
-	if (!inputFile.is_open()) { cout << "Error opening serializedTree.txt!\n"; return 0; }
-	while (inputFile) {
-		node* n = new node;
-		inputFile.read(byteArr, 1); n->symbol = byteArr[0];
-		inputFile.read(byteArr, 1); n->frequency = byteArr[0] - '0'; //Could skip serializing this, but included it for completeness.
-		inputFile.read(byteArr, 1); bool hasLeft = byteArr[0] - '0';
-		inputFile.read(byteArr, 1); bool hasRight = byteArr[0] - '0';
-		if (!(hasLeft || hasRight)) {
-			n->left = n->right = NULL;
-			stack.push(n); //If n is a leaf, push on stack.
+	if (inputFile.is_open()) {
+		while (inputFile) {
+			node* n = new node;
+			inputFile.read(byteArr, 1); n->symbol = byteArr[0];
+			inputFile.read(byteArr, 1); n->frequency = byteArr[0] - '0'; //Could skip serializing this, but included it for completeness.
+			inputFile.read(byteArr, 1); bool hasLeft = byteArr[0] - '0';
+			inputFile.read(byteArr, 1); bool hasRight = byteArr[0] - '0';
+			if (!(hasLeft || hasRight)) {
+				n->left = n->right = NULL;
+				stack.push(n); //If n is a leaf, push on stack.
+			}
+			else if (stack.size() - 1 > 0) { //This is to exit when we only have the root left.
+				//If n is an internal node, pop 2 children from stack, push node on.
+				n->right = stack.top(); stack.pop();
+				n->left = stack.top(); stack.pop();
+				stack.push(n);
+			} //Root should be left at end, so use stack.top() to access the Huffman tree for decryption.
 		}
-		else if (stack.size() - 1 > 0) { //This is to exit when we only have the root left.
-			//If n is an internal node, pop 2 children from stack, push node on.
-			n->right = stack.top(); stack.pop();
-			n->left = stack.top(); stack.pop();
-			stack.push(n);
-		} //Root should be left at end, so use stack.top() to access the Huffman tree for decryption.
 	}
+	else { cout << "Error opening serializedTree.txt!\n"; inputFile.close(); return 0; }
 	inputFile.close();
 
 	//Second and finally, use the restored tree to decrypt the encrypted message.
@@ -210,10 +215,12 @@ int main(int argc, char** argv)  {
 		encryptedMessage = new char[(int)messageSize];
 		inputFile.seekg(0);
 		inputFile.read(encryptedMessage, messageSize); //Trash bits included.
-	} else { cout << "Error opening encryptedMessage.txt!\n"; return 0; }
+	}
+	else { cout << "Error opening encryptedMessage.txt!\n"; inputFile.close();  return 0; }
 	inputFile.close();
-	outputFile.open("output", ios::out | ios::binary); 
-	if (outputFile.is_open()) {
+	
+	FILE *f = fopen("output", "wb"); // outputFile.open("output", ios::out | ios::binary); 
+	if (f != NULL) { // if (outputFile.is_open()) {
 		node* n = stack.top();
 		for (int i = 0; i < messageSize; ++i) { //For each byte in the encrypted message...
 			int currentByte = encryptedMessage[i];
@@ -223,19 +230,20 @@ int main(int argc, char** argv)  {
 				else if (result != 0 && n->right != NULL) n = n->right;
 				if (n->left == NULL && n->right == NULL) { //Any time a leaf node is reached, write the symbol, end of code!
 					byteArr[0] = n->symbol;
-#ifdef DEBUG
+					#ifdef DEBUG
 					if (i < operationInfoLimit) {
 						cout << "Wrote " << n->symbol << "to output.\n";
 						cout << "byteArr[0]: " << (int)byteArr[0] << endl;
 					}
-#endif
-					outputFile.write(byteArr, 1);
+					#endif
+					putc(byteArr[0], f);
 					n = stack.top();
 				}
 			}
 		}
-	} else { cout << "Error creating or writing to output file!\n"; return 0; }
-	outputFile.close();
+	} else { cout << "Error creating or writing to output file!\n"; fclose(f); return 0; }
+	fclose(f); //outputFile.close();
+	
 
 	delete[] message;
 	delete[] sortedMessage;
