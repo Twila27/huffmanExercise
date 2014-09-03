@@ -236,7 +236,7 @@ int main(int argc, char** argv)  {
 						cout << "byteArr[0]: " << (int)byteArr[0] << endl;
 					}
 					#endif
-					putc(byteArr[0], f);
+					fwrite(byteArr, sizeof(char), sizeof(byteArr), f); //Note putc() was still formatted, in contradiction to Wikipeda, but Squirrel's function works!
 					n = stack.top();
 				}
 			}
