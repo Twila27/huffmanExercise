@@ -1,0 +1,130 @@
+Started about 1:00 PM, 6/5/2014.
+3:45 break.
+Huffman Exercise Plan: DRY
+
+Start With Main() 
+	-> I/O Parsing Routine via <string>, <iostream>? See String C++ class exercise.
+	-> 
+	
+Huffman Procedure Steps: 
+	1.) Read in message.
+	2.) Count frequency per character.
+	3.) Starting from a forest of one-node binary trees, join the two lowest frequency trees underneath the root equal to their sum until the forest is 1 tree.
+	
+	4.) Traverse the tree, for each left-traversal printing 0 and right-traversal 1, to create a Huffman table with a row per character containing its code.
+	5.) Use Huffman table to decode messages encrypted with this Huffman encoding, should get original (would normally transfer the table across a network).
+
+Huffman Implementation:
+	Forest - an STL container from which we can easily remove elements? Yeah, try it out with a vector first.
+	Tree - as Struct or Class? => What functions are needed? Creation and joining, but other than that primarily only needs state, right? So a struct would work if we simply implemented the join(BinaryTree*, BinaryTree*) as a non-member function.
+	Table - should be able to create this as an array to save space, if we provide a function to translate the indexes into their binary values (what library function handles this in C++? Or do you just output an 0b in front?).
+
+	
+	When main() starts, it
+	X	(1) reads in the message all at once into a string, 
+	X	(2) stores the length of the string as a separate variable representing all symbol frequencies' denominator, 
+	X	(3) passes the message to getFrequencies(const &string), or should this be in main()? YES)
+	X	(4) puts the forest's length into a separate global variable that will be equivalent to the length and count of the Huffman table and tree, 
+	X	(5) iterates over the forest until 1 tree remains, 
+		X	sending the two lowest-frequency tree nodes to join(const &Node, const &Node),
+		X	and pushing back the resultant Tree into the forest BEFORE using the erase-remove idiom to get rid of the old, smaller trees in the vector,
+	X	(6) as a check, asserts that the sums of the nodes in the final Huffman tree are equivalent to (2)
+	X	(7) as a check, asserts that the count of the forest is 1
+	X	(8) calls a separate function buildHuffmanTable(const Node*, const string&), initially with bHT(vector[0], ""), which
+			traverses the tree in an arbitrary depth-first (this being why it need be a separate function, for recursion) order,
+			concatenating to the second argument either 0 or 1 for a left or right traversal, respectively, stopping at each leaf node (null children)
+			and adding the corresponding symbol to an array initialized with a size equal to (4)'s global whose indices map to the binary codes.
+		and stores the resultant Huffman table to an array variable, -- using a map<char, string> instead! see competitive programming notes (section 2.1)
+	nop	(9) encrypts message by looping over (1)'s string, appending the result of the function lookupCode(const &table, message[i]) per iteration.
+	nop	(10) decrypts message by looping over (9)'s string, appending the result of the function lookupSymbol(const &table, encryptedMessage[i]) per iteration.
+		(11) and returns 0.
+X	When getFrequencies(const &string) starts, it <-- do not make this a function, as unlike join(..) there is not a reason to repeat it!
+		copies the string to a temporary variable,
+		sorts the contents of the temporary variable in ascending order in O(n log n) time,
+		traverses that variable's elements in a loop, and
+			if the current character matches the next, increment current frequency,
+			else add a new BinaryTree struct to the forest with null children pointers, correct frequency and symbol, and reset the current frequency to zero,
+		and returns that forest of one-node BinaryTrees as a vector.
+		(Reasoning: In order to optimize the frequency counting, should we sort the characters in ascending order? Or will this cost us more in the end than doing a brutish, once-nested loop to compare each pair of elements? Sorting will allow us to traverse the array of characters one time and be done, but at the additional O(n log n) to sort. The alternative approach is clearly O(n^2). So let's go with the sorting approach, though it will require an additional space requirement to copy the message for rearrangement, so if memory is an issue versus time (e.g. a mobile application) prefer the more time-consuming solution.)
+X	When join(const &Node, const &Node) starts, it
+		returns a new constant Node object with left and right children pointers to its argument nodes, no symbol, and frequency := the sum of its arguments'.
+		
+Becoming heavily stumped trying to work around reading it in a non-formatted, i.e. binary mode. Finally got it, wasn't too bad in the end, just things I did not know.
+But now even more so with trying to write the darn things as bits.
+
+	char* byteArr;
+	byteArr = new char[15]; //!
+	bytePos = 7; currIndex = 0;
+	for (int i = 0; i < message.length(); ++i) {
+		string code = lookup(message[i]);
+		if (code.length() <= bytePos) {
+			for (int j = code.length(); j > 0; j--) byteArr[currIndex] |= code[j] << bytePos--;
+			cout << "byteArr[currIndex]: " << byteArr[currIndex];
+			cout << "bytePos: " << bytePos;
+		}
+	}
+	
+== New Notes ==
+(0) If you try to save input.txt inside of VS, you will end up with weird Unicode characters insert before the text.
+(0) Furthermore, all the weird symbols after the text do not matter despite their showing up in debug, what matters is what ends up being added to the Huffman table.
+(1) The biggest issue is understanding what I'm doing when I'm encrypting the message. FALSE, it's during decryption.
+(!) CHECKLIST OF CHECKS TO PASS:
+	O (A) Does the original message match its representation in debug? YES if (0) is followed.
+	O (B) Are there any unexpected symbols being added to the Huffman table? NO if (0) is followed.
+	O (C) Does the encrypted message match what is expected? YES except for extra 0 trash-bit padding on final write.
+		-> If not, there is a problem with the byteArr loop writing to encryptedMessage.txt.
+		(!) To translate the Unicode character to a more useful representation search online for "Unicode-to-binary".
+	O (D) Does the serialized tree match what is expected? YES!
+		-> If not, there was probably an issue in (B).
+		-> In VS, the weird I with a ` above it is just used for the no-symbol parent nodes from join(), ignore them.
+!	X (E) Does the output result match what is expected? NOT ALWAYS.
+		-> Cause #1: the aforementioned trash bits, but they are a necessary evil (have to write in bytes).
+		-> Therefore, the responsibility falls upon the reading loop...
+	KEY: the byteArr writing and reading loops that use bytePos.
+		(i) Does the writing loop align things properly...?
+		(ii) Does the reading loop know when to STOP reading?
+		(!) When trying to read the bytePos[0]: -128 debug, use http://www.exploringbinary.com/twos-complement-converter/
+			-> -128 = 1000 0000; -64 = 1100 0000; -32 = 1110 0000; -16 = 1111 0000; -8 = 1111 1000.
+			-> Recall, what you do is invert all bits and add 1, e.g. -32 = 1110 0000 => 0001 1111 + 1 = 0010 0000.
+		(!!) The debug has now been updated to show, when bytePos hits 0, that byteArr[bytePos] is written to file.
+			-> The value immediately above it that starts "0.)" is the byte being written to the file.
+			-> This SHOULD match up with the expected encrypted form of the message.
+		(iii) Is the tree de-serialized properly? (Check by breaking at n = stack.top() and looking into n.) YES.
+	
+(2) Problem Inputs to BEAT!
+	"silverfish" and its variations.
+	PNGs and other file types (though this may be (0) again so watch out).
+	A file that has only one byte, e.g. "aaaaaaaaaaaaaaaaa"?
+	-> The prefix code is edge-label-based, so it gets prefixed "" and the loop breaks without writing anything.
+	-> But it might be an unreasonable case to go out of our way to defend against.
+(3) Working on the (!!) Problem
+	s.i.l.v.e.r.f.i.s.h.
+	every . separates prefix codes
+	every - separates 8 bits or 1 byte written
+	1st add periods: 111.110.011.101.000.100.001.110.111.010.
+	2nd add hyphens: 111.110.01-1.101.000.1-00.001.110.-111.010.?? (treat ? as 0 by default)
+	3rd convert each byte to 2's complement: -7, -47, 14, -24 which is exactly what the debug shows. 
+		-> Problem is that the reading loop doesn't know to stop before these two extra bits.
+	SHOWER SOLUTION: looking at the debug, I notice at the end of the encryptedMessage.txt writing loop that bytePos = #trashbits. Therefore,
+		(1) Write bytePos onto the end of encryptedMessage.txt.
+		(2) Open the outputResult.txt or whatever file at the end.
+		(3) Get size as before, but then back up to size minus a byte with seekg() to read bytePos back as numTrashBits.
+		(4) Reassign the size (3) -= numTrashBits.
+		(5) Hop up to the beginning of the message and read it exactly as before, it should work thanks to the new size.
+	--> Had to alter my logic in several areas to get it working, but the general solultion did work.
+(4) But this doesn't actually solve the problem of the PNG, does it? Doesn't seem so, only works for text right now.
+	--> I appear to have found this my final bug: "NUL". 
+		This appears to be a strange character included in ANSI but not UTF-8?
+		All my corrupted output, when examined in N++, is perfect except that it omits this NUL character...
+		As it turns out, this is the '\0' c-string terminating character--is this why my parser is failing with regards to compressing it?
+		(1) Check and see if it even registers in the table.
+(1) Does the NUL appear in the Huffman table? "Yes", but it's not NUL, it's just '\0'.
+	WHAT IS HAPPENING: it is reading in the value, but it just seems to skip over the byte altogether during write.
+		-> As the C++ online compiler's cout << 'a' << '\0' << 'b'; showed by outputting "ab".
+	--> UCS-2 LE (little endian) seems to be roughly UTF-16. This encoding begins with the BOM (byte order mark) header of 0xFF followed by 0xFE for its first 2 bytes. Furthermore, Notepad++ calls it "UCS-2" allegedly because it lacks certain supports for UTF-16 (programmers.stackexchange.com/questions/187169/how-to-detect-the-encoding-of-a-file)
+		- See also w3schools.com/charsets/ref_html_utf8.asp which adds that "16-bit Unicode Transformation Format is a variable-length character encoding for Unicode, capable of encoding the entire Unicode repertoire. UTF-16 is used in major operating systems and environments, like Microsoft Windows, Java and .NET."
+	-> It seems like different Visual Studio versions handle this problem differently, so it might be that at the time the Huffman Exercise was written, this wasn't a bug encountered.
+	--> ANSI, on the other hand, is a complete misnomer. It often is Windows-1252 encoding under the hood on most western European and English systems; however, it can vary depending on the system. But the key difference is its use of 8-bit representation (extended ASCII) as distinct from the typical 7-bit ASCII encoding (though now this is usually 8 bits as well, just with MSB always 0).
+		- What this means is that when Notepad++ reports "ANSI", it may (not unlike UTF-16 above) not be giving enough detail.
+		--> w3Schools states: ANSI was the default character set in Windows up to Windows 95, AKA Windows-1252.
+			- w3schools.com/charsets/ref_html_ansi.asp
